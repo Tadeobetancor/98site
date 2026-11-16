@@ -123,6 +123,8 @@ Base de conocimientos del proyecto. Todo esto ya está analizado: no hace falta 
 - Logo de la persiana como aerosol (relleno plano + 15% de textura + sobre-pulverizado + salpicaduras), en demo y final.
 - Rendimiento (solo en `final/`, sin cambios visuales): el perchero 3D dibuja a 30 cps en reposo (solo brisa) y 60 al moverse; se pausa con la ficha abierta (`pausar()`, 2,2 s después de abrir; vuelve al cerrar); pixel ratio máx. 1,5 (antes 2); el raycast del hover corre una vez por cuadro. Si sigue lento, los siguientes sospechosos son los `backdrop-filter` (header y ráfaga) — tocarlos cambia la estética, consultar antes.
 - Mallas del perchero menos brillosas: `TONO = 0.8` en `final/perchero.js`, roughness 1 y casi sin reflejo de ambiente.
+- Compartir / pestaña (solo `final/`): `img/compartir.jpg` (1200×630: mural oscurecido + logo + "98 District · Boardshorts vintage · Hurlingham"), `favicon.ico` + `img/favicon.png` (logo aqua sobre negro redondeado), `img/icono-180.png`. Etiquetas Open Graph en `index.html` con `https://TU-DOMINIO` como marcador: REEMPLAZAR por el dominio real al publicar (WhatsApp necesita direcciones absolutas).
+- Repo: https://github.com/Tadeobetancor/98site (privado, rama main; fuera: Referencias/, Fotos de la ropa/).
 - PENDIENTE: fotos de detalle (`img/detalles/*.jpg` siguen siendo de celular sobre alfombra; lo ideal es re-fotografiar), videos sin tratar, datos reales (precios, talles, nombres, Instagram), publicar (hosting/dominio), los parámetros de prueba (?sinintro, etc.) siguen activos.
 
 ## Pedido del cliente (resumen)
