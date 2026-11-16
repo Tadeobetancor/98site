@@ -1,0 +1,9 @@
+# Material que no va al repositorio: referencias de terceros y fotos originales
+Referencias/
+Fotos de la ropa/
+logo.jpeg
+# entornos y temporales
+.venv/
+__pycache__/
+*.pyc
+.claude/
