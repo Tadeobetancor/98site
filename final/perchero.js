@@ -20,6 +20,47 @@ const MORDIDA = -0.205;                          // altura (bajo el tubo) donde 
 const suave = (t) => t * t * (3 - 2 * t);
 const limitar = THREE.MathUtils.clamp;
 
+// ---------- volumen: que dos mallas nunca se atraviesen ----------
+// Vista desde arriba cada malla es una "cápsula": un segmento del ancho de la prenda (girado como esté) con el grosor
+// de la tela alrededor (la cara de adelante se infla hasta ~0,2 y el dorso ~0,07 hacia atrás). Si dos vecinas tienen
+// ángulos distintos (una girando de frente y la otra de costado) se cruzaban en el espacio y se veían "entrelazadas".
+function capsula(it, z) {
+  const c = Math.cos(it.giro), s = Math.sin(it.giro);
+  const k = it.ancho / ANCHO_MAX;
+  const lz = (0.11 + 0.017 * k) / 2;            // centro del grosor (la tela se infla más hacia adelante)
+  const r = (0.11 + 0.153 * k) / 2 + 0.02;      // medio grosor + un poquito de aire
+  const l0 = -it.ancho / 2 - it.centro, l1 = it.ancho / 2 - it.centro;
+  return { ax: l0 * c + lz * s, az: z - l0 * s + lz * c, bx: l1 * c + lz * s, bz: z - l1 * s + lz * c, r };
+}
+// distancia entre dos segmentos en el plano (el de B corrido dx en x)
+function distSegmentos(A, B, dx) {
+  const px = A.ax, pz = A.az, ux = A.bx - A.ax, uz = A.bz - A.az;
+  const qx = B.ax + dx, qz = B.az, vx = B.bx - B.ax, vz = B.bz - B.az;
+  const wx = px - qx, wz = pz - qz;
+  const a = ux * ux + uz * uz, b = ux * vx + uz * vz, c = vx * vx + vz * vz, d = ux * wx + uz * wz, e = vx * wx + vz * wz;
+  const den = a * c - b * b;
+  let sN, sD = den, tN, tD = den;
+  if (den < 1e-9) { sN = 0; sD = 1; tN = e; tD = c; } else {
+    sN = b * e - c * d; tN = a * e - b * d;
+    if (sN < 0) { sN = 0; tN = e; tD = c; } else if (sN > sD) { sN = sD; tN = e + b; tD = c; }
+  }
+  if (tN < 0) { tN = 0; sN = limitar(-d, 0, a); sD = a; } else if (tN > tD) { tN = tD; sN = limitar(b - d, 0, a); sD = a; }
+  const sc = Math.abs(sN) < 1e-9 ? 0 : sN / sD, tc = Math.abs(tN) < 1e-9 ? 0 : tN / tD;
+  return Math.hypot(wx + sc * ux - tc * vx, wz + sc * uz - tc * vz);
+}
+// la menor distancia entre ganchos (en x) para que A (a la izquierda) y B no se toquen
+function separacion(A, B) {
+  const min = A.r + B.r;
+  const hi = Math.max(A.ax, A.bx) - Math.min(B.ax, B.bx) + min;
+  if (hi <= 0) return 0;
+  let dx = hi;
+  while (dx > 0 && distSegmentos(A, B, dx) >= min) dx -= 0.03; // de lejos hacia cerca, hasta que se tocan
+  if (dx <= 0) return 0;
+  let lo = dx, alto = dx + 0.03;                                  // y se afina para que no "salte" de a 3 cm
+  for (let k = 0; k < 7; k++) { const m = (lo + alto) / 2; if (distSegmentos(A, B, m) >= min) alto = m; else lo = m; }
+  return alto;
+}
+
 // resorte crítico: llega sin rebotar y sin cortes
 function resorte(r, objetivo, dt, rigidez) {
   const amort = 2 * Math.sqrt(rigidez);
@@ -126,7 +167,7 @@ function texturaSombra(img) {
 // dónde está la cintura en la foto recortada: primera franja de arriba con tela, y sus bordes izquierdo/derecho
 // ---------- volumen de la tela ----------
 const DORSO = 0.72;
-const TONO = 0.8;   // luz que recibe la tela (1 = como antes, muy brillosa) // qué tan oscuro se ve el dorso de la malla
+const TONO = 1;     // multiplicador de la tela (las luces ya están calibradas para que de frente se vea ~0,78 de la foto)
 
 // Campo de "profundidad" 0..1 a partir del alfa: 0 en el borde de la prenda, sube redondeado hacia adentro
 // (distancia al borde con chamfer de dos pasadas, rampa con forma de seno y un suavizado para que no se vean escalones).
@@ -199,29 +240,41 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // más de 1,5 no se nota y cuesta casi el doble
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  // Neutral (Khronos PBR Neutral): respeta el color de la foto. El ACES de antes corría los tonos (el azul marino
+  // se iba a violeta/celeste) y desaturaba; con este, lo que se ve es el color real de la malla.
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1;
   contenedor.appendChild(renderer.domElement);
 
   const escena = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
-  escena.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // el entorno (sala blanca) es SOLO para los reflejos del metal y la madera de las perchas. Antes iba en
+  // escena.environment y en three r170 eso ignora el envMapIntensity del material: la sala iluminaba las mallas
+  // con fuerza 1 y las lavaba (el azul marino se veía celeste). Ahora las mallas las iluminan solo las luces.
+  const entorno = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   const camara = new THREE.PerspectiveCamera(16, 1, 0.1, 200);
 
-  // luz de local: cenital suave + un poco de calidez de costado
-  escena.add(new THREE.HemisphereLight(0xffffff, 0x3a3d40, 1.15));
-  const sol = new THREE.DirectionalLight(0xfff1dc, 2.1);
+  // luz de local, casi neutra (la cálida teñía las mallas). Sin la sala blanca de entorno sobre la tela, la luz la
+  // ponen solo estas cuatro: hemisferio parejo + principal arriba a la izquierda + relleno a la derecha (para que las
+  // de la izquierda, que la principal agarra de espaldas, no queden negras) + una suave de frente, desde la cámara.
+  // LUZ escala todo junto (?luz=1.2 para probar más o menos luz sin tocar el código).
+  const LUZ = parseFloat(new URLSearchParams(location.search).get('luz')) || 1;
+  escena.add(new THREE.HemisphereLight(0xffffff, 0x3a3c3e, 1.5 * LUZ));
+  const sol = new THREE.DirectionalLight(0xfff6ec, 2.6 * LUZ);
   sol.position.set(-3, 4, 5);
   escena.add(sol);
-  const relleno = new THREE.DirectionalLight(0xdff6f8, 0.7);
+  const relleno = new THREE.DirectionalLight(0xeef6f7, 1.4 * LUZ);
   relleno.position.set(4, 1, 3);
   escena.add(relleno);
+  const frente = new THREE.DirectionalLight(0xffffff, 1.0 * LUZ);
+  frente.position.set(0, 1.5, 8);
+  escena.add(frente);
 
   // barral: tubo de aluminio recto que cruza TODA la pantalla (sale por los dos bordes) y no se mueve nunca
-  const aluminio = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 1, roughness: 0.3 });
+  const aluminio = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, metalness: 1, roughness: 0.3, envMap: entorno });
   const mats = {
-    metal: new THREE.MeshStandardMaterial({ color: 0xdadbde, metalness: 1, roughness: 0.18 }),
-    madera: new THREE.MeshPhysicalMaterial({ map: texturaMadera(), roughness: 0.42, metalness: 0, clearcoat: 0.45, clearcoatRoughness: 0.35 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0xdadbde, metalness: 1, roughness: 0.18, envMap: entorno }),
+    madera: new THREE.MeshPhysicalMaterial({ map: texturaMadera(), roughness: 0.42, metalness: 0, clearcoat: 0.45, clearcoatRoughness: 0.35, envMap: entorno }),
   };
   const PARED_Z = -0.7;
   const barral = new THREE.Mesh(new THREE.CylinderGeometry(TUBO, TUBO, 1, 28), aluminio);
@@ -273,10 +326,10 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
         geo.computeVertexNormals();
         return geo;
       };
-      const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0, envMapIntensity: 0.08 });
+      const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
       const malla = new THREE.Mesh(superficie(1, 1), mat);
       // el dorso: un poco más chato y más oscuro (es la parte de atrás de la tela, no la estampa)
-      const matDorso = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.BackSide, roughness: 1, metalness: 0, envMapIntensity: 0.06 });
+      const matDorso = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.BackSide, roughness: 1, metalness: 0 });
       matDorso.color.setScalar(DORSO * TONO);
       mat.color.setScalar(TONO);
       const dorso = new THREE.Mesh(superficie(-1, 0.8), matDorso);
@@ -298,18 +351,28 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
       const { t, escala } = texturaSombra(img);
       const sombra = new THREE.Mesh(
         new THREE.PlaneGeometry(ancho * escala, alto * escala).translate(0, -alto / 2, 0),
-        new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.2, depthWrite: false }),
+        // en la lista opaca (para dibujarse antes que todas las mallas) pero mezclando como transparente
+        new THREE.MeshBasicMaterial({ map: t, transparent: false, opacity: 0.2, depthWrite: false, blending: THREE.CustomBlending,
+          blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor }),
       );
       sombra.position.set(0, malla.position.y - 0.06, PARED_Z);
       sombra.renderOrder = -1;
       escena.add(sombra);
-      Object.assign(item, { malla, dorso, sombra, alto, ancho, centro });
+      // orden de dibujo: dentro de cada malla primero el dorso (que limpia la profundidad), después la cara y la percha
+      dorso.renderOrder = -2;
+      malla.renderOrder = -1;
+      dorso.onBeforeRender = (r) => { r.state.buffers.depth.setMask(true); r.clearDepth(); };
+      Object.assign(item, { malla, dorso, sombra, percha, alto, ancho, centro });
     });
     return item;
   });
 
   // ---------- estado: foco (qué malla está de frente) con resorte ----------
-  let focoObj = Math.floor((n - 1) / 2); // a dónde va el foco (entero salvo mientras se arrastra)
+  // ?malla=p03 (prueba): arranca con esa malla de frente
+  const pedida = productos.findIndex((p) => p.id === new URLSearchParams(location.search).get('malla'));
+  // ?foco=3.5 (prueba): congela el perchero a mitad de camino entre dos mallas
+  const focoPrueba = parseFloat(new URLSearchParams(location.search).get('foco'));
+  let focoObj = !isNaN(focoPrueba) ? limitar(focoPrueba, 0, n - 1) : pedida >= 0 ? pedida : Math.floor((n - 1) / 2); // a dónde va el foco (entero salvo mientras se arrastra)
   const foco = { x: focoObj, v: 0 };
   let seleccion = null;       // malla que se está "presentando" antes de abrir la ficha
   let selT = 0;
@@ -353,11 +416,15 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
       it.abierto = 1 - a;
       it.lado = Math.sign(d);
       it.cerrado = a;
+      it.giro = -it.lado * (GIRO + (GIRO_PILA - GIRO) * (it.pila || 0)) * it.cerrado;
+      it.caps = capsula(it, it.abierto * ADELANTE);
     }
     xs[0] = 0;
     for (let i = 1; i < n; i++) {
       const a = items[i - 1], b = items[i];
-      xs[i] = xs[i - 1] + PASO + ((a.abierto * a.ancho + b.abierto * b.ancho) / 2) * 0.96;
+      const natural = PASO + ((a.abierto * a.ancho + b.abierto * b.ancho) / 2) * 0.96;
+      // nunca más cerca de lo que permite el volumen de las dos (según cómo esté girada cada una)
+      xs[i] = xs[i - 1] + Math.max(natural, separacion(a.caps, b.caps));
     }
   }
   function xFoco() {
@@ -523,6 +590,13 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
     resorte(foco, focoObj, dt, arr.arrastre ? 260 : 70);
     disponer();
     ubicar();
+
+    // Donde no hay lugar (apiladas en las puntas) igual se superponen: cada malla se dibuja ENTERA por delante de las
+    // que están más lejos de la elegida, como prendas apiladas (nunca cruzadas). La elegida va última, adelante de todo.
+    items.slice().sort((p, q) => Math.abs(q.idx - foco.x) - Math.abs(p.idx - foco.x)).forEach((it, k) => {
+      it.pivote.renderOrder = k + 1;
+      if (it.percha) it.percha.renderOrder = k + 1; // la percha es un grupo propio: lleva el mismo turno
+    });
 
     if (seleccion) selT = Math.min(1, selT + dt / 0.36);
     const sel = suave(selT);

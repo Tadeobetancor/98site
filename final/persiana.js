@@ -656,8 +656,8 @@ function logoGrafiti(ctx, logo, geo) {
   ctx.restore();
   // relleno plano con un brillo chico (el aerosol fresco brilla un poco)
   ctx.save();
-  ctx.shadowColor = 'rgba(143,220,226,0.35)';
-  ctx.shadowBlur = alto * 0.03;
+  ctx.shadowColor = 'rgba(143,220,226,0.18)';
+  ctx.shadowBlur = alto * 0.025;
   ctx.drawImage(plano, x, y, ancho, alto);
   ctx.restore();
   // un 15% de la textura original para que no quede "de computadora"
@@ -925,7 +925,7 @@ function poster(tipo, w, h) {
     a.textAlign = 'left';
     textoAjustado(a, '98', m * 0.6, h * 0.62, w - m * 1.2, h * 0.62, 900);
     condensada(a, 'condensed');
-    textoAjustado(a, 'BOARDSHORTS', m, h * 0.72, w - m * 2, h * 0.07, 800);
+    textoAjustado(a, 'MALLAS', m, h * 0.72, w - m * 2, h * 0.07, 800);
     a.fillRect(m, h * 0.755, w - m * 2, Math.max(1, h * 0.006));
     textoAjustado(a, 'SUMMER DROP — 2026', m, h * 0.81, w - m * 2, h * 0.045, 600);
     textoAjustado(a, 'HURLINGHAM · ZONA OESTE', m, h * 0.86, w - m * 2, h * 0.04, 500);
@@ -956,7 +956,7 @@ function poster(tipo, w, h) {
     textoAjustado(a, 'ONLY', m, h * 0.86, w - m * 2, h * 0.28, 900);
     a.fillStyle = '#0d0d0f';
     condensada(a, 'condensed');
-    textoAjustado(a, 'BOARDSHORTS · 1998 / 2026', m, h * 0.525, w - m * 2, h * 0.07, 800);
+    textoAjustado(a, 'MALLAS · 1998 / 2026', m, h * 0.525, w - m * 2, h * 0.07, 800);
     a.fillStyle = BLANCO;
     a.beginPath();
     for (let i = 0; i < 10; i++) {
@@ -1280,7 +1280,7 @@ function baseMetal(ctx, w, h, H) {
   ctx.fillRect(0, h - 1.5, w, 1.5);
 }
 
-function pintar(ctx, w, h, logo, fotos) {
+function pintar(ctx, w, h, logo, fotos, prendida = true) {
   semilla = 98;
   const esc = Math.max(0.55, Math.min(1.15, Math.min(w, h) / 820));
   const paso = Math.max(22, Math.round(h / 34));
@@ -1305,7 +1305,8 @@ function pintar(ctx, w, h, logo, fotos) {
     const e = Math.max(w / mural.width, h / mural.height);
     const mw = mural.width * e, mh = mural.height * e;
     ctx.save();
-    if ('filter' in ctx) ctx.filter = 'saturate(0.92) brightness(0.74) contrast(1.06)';
+    // apagada = penumbra de la calle; prendida = lo que ven las luces (igual de oscura que antes, nunca más clara)
+    if ('filter' in ctx) ctx.filter = prendida ? 'saturate(0.9) brightness(0.8) contrast(1.06)' : 'saturate(0.75) brightness(0.36) contrast(1.04)';
     ctx.drawImage(mural, (w - mw) / 2, (h - mh) * 0.45, mw, mh);
     ctx.restore();
   }
@@ -1319,20 +1320,27 @@ function pintar(ctx, w, h, logo, fotos) {
   ctx.fillRect(0, 0, w, h);
 
   // 8) sombras que tiran las luces, logo directo sobre la pared, lamas por encima de todo y la franja metálica abajo
-  sombrasLogo(ctx, logo, geo, spotsLED(w, h, geo), '#000', 0.82);
-  logoGrafiti(ctx, logo, geo);
+  // las sombras las tiran las luces: solo existen donde hay luz
+  if (prendida) sombrasLogo(ctx, logo, geo, spotsLED(w, h, geo), '#000', 0.7);
+  // el logo es pintura: en penumbra también se apaga (no brilla solo como un neón)
+  const [lc, lx] = lienzo(w, h);
+  logoGrafiti(lx, logo, geo);
+  ctx.save();
+  if (!prendida && 'filter' in ctx) ctx.filter = 'brightness(0.5) saturate(0.8)';
+  ctx.drawImage(lc, 0, 0, w, h);
+  ctx.restore();
   lamas(ctx, w, h - pie, paso);
   baseMetal(ctx, w, h, pie);
   return geo;
 }
 
-// ---------- Luces LED cálidas, arriba del todo (sin cajón) ----------
-// Dos spots chiquitos pegados al borde de arriba, uno en cada punta, apuntando en diagonal al logo.
-// ACOMPAÑAN al logo: bañan la chapa alrededor y le suman brillo aqua al contorno, pero no lo tiñen ni lo tapan
-// (la luz se recorta con la silueta del logo). El canvas de luz va con mix-blend-mode: screen sobre los grafitis.
-// Sombras del logo según las luces: cada LED (arriba, en las puntas) proyecta la sombra del logo hacia el lado
-// contrario (la luz de la izquierda tira la sombra abajo a la derecha y viceversa).
-// Se dibuja la silueta del logo corrida en esa dirección, desenfocada.
+// ---------- Luces: dos bañadores de pared arriba (sin cajón) ----------
+// Como en un local de verdad: dos luminarias chicas pegadas arriba, a un cuarto de cada punta, que bañan la chapa
+// con conos ANCHOS y suaves (la "parábola" de luz sobre la pared que se abre hacia abajo y se pierde).
+// La luz no SUMA brillo encima (eso se veía artificial): la capa de luz es la misma persiana pintada "prendida",
+// recortada con la forma de los conos; abajo queda la versión en penumbra. Al titilar se ve cómo la luz
+// prende y apaga los colores reales del mural, y en ningún lugar queda más clara que la pared prendida.
+// Sombras del logo según las luces: cada luminaria proyecta la sombra del logo hacia el lado contrario.
 function sombrasLogo(ctx, logo, geo, spots, color, alfa) {
   const sil = document.createElement('canvas');
   sil.width = logo.width;
@@ -1342,9 +1350,9 @@ function sombrasLogo(ctx, logo, geo, spots, color, alfa) {
   b.globalCompositeOperation = 'source-in';
   b.fillStyle = color;
   b.fillRect(0, 0, sil.width, sil.height);
-  const largo = geo.alto * 0.085;
+  const largo = geo.alto * 0.06;
   ctx.save();
-  if ('filter' in ctx) ctx.filter = `blur(${Math.max(2, Math.round(geo.alto * 0.014))}px)`;
+  if ('filter' in ctx) ctx.filter = `blur(${Math.max(3, Math.round(geo.alto * 0.022))}px)`;
   ctx.globalAlpha = alfa;
   for (const s of spots) ctx.drawImage(sil, geo.x + s.dx * largo, geo.y + s.dy * largo, geo.ancho, geo.alto);
   ctx.restore();
@@ -1352,108 +1360,97 @@ function sombrasLogo(ctx, logo, geo, spots, color, alfa) {
 
 function spotsLED(w, h, geo) {
   const esc = Math.max(0.6, Math.min(1.2, Math.min(w, h) / 800));
-  const margen = Math.max(30 * esc, w * 0.06);
+  // en celular (angosto) van más afuera para que los conos igual cubran el logo
+  const frac = w < 700 ? 0.16 : 0.24;
   return [-1, 1].map((lado) => {
-    const px = lado < 0 ? margen : w - margen, py = 14 * esc;
+    const px = lado < 0 ? w * frac : w * (1 - frac), py = 12 * esc;
     let dx = geo.cx - px, dy = geo.cy - geo.alto * 0.1 - py;
     const d = Math.hypot(dx, dy);
     dx /= d; dy /= d;
-    const largo = 46 * esc, radio = 12 * esc;
-    return { px, py, dx, dy, largo, radio, esc, bx: px + dx * largo * 0.6, by: py + dy * largo * 0.6, dist: d };
+    const largo = 38 * esc, radio = 10 * esc;
+    return { lado, px, py, dx, dy, largo, radio, esc, bx: px + dx * largo * 0.55, by: py + dy * largo * 0.55, dist: d };
   });
 }
 
-// el cuerpo del spot (se ve también apagado): base pegada arriba + cabezal negro girado hacia el logo
+// el cuerpo de la luminaria (se ve también apagada): base pegada arriba + cabezal negro mate girado hacia el logo
 function cuerpoLED(ctx, s) {
   const { px, py, dx, dy, largo, radio } = s;
   ctx.save();
-  ctx.fillStyle = '#18181b';
-  ctx.fillRect(px - radio * 1.3, 0, radio * 2.6, py * 0.55);
+  ctx.fillStyle = '#141416';
+  ctx.fillRect(px - radio * 1.4, 0, radio * 2.8, py * 0.6);
   ctx.translate(px, py);
   ctx.rotate(Math.atan2(dy, dx));
-  ctx.shadowColor = 'rgba(0,0,0,0.75)';
-  ctx.shadowBlur = radio * 1.2;
-  ctx.shadowOffsetY = radio * 0.5;
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur = radio * 1.4;
+  ctx.shadowOffsetY = radio * 0.6;
   const g = ctx.createLinearGradient(0, -radio, 0, radio);
-  g.addColorStop(0, '#45454b');
-  g.addColorStop(0.3, '#1e1e22');
-  g.addColorStop(1, '#0a0a0b');
+  g.addColorStop(0, '#2c2c30');
+  g.addColorStop(0.35, '#18181b');
+  g.addColorStop(1, '#08080a');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.roundRect(-largo * 0.3, -radio, largo * 0.9, radio * 2, radio * 0.5);
+  ctx.roundRect(-largo * 0.3, -radio, largo * 0.9, radio * 2, radio * 0.45);
   ctx.fill();
   ctx.restore();
 }
 
-function haz(ctx, s, alcance, apertura, paradas) {
-  const { bx, by, dx, dy } = s;
-  const nx = -dy, ny = dx, r0 = s.radio * 0.7, r1 = alcance * Math.tan(apertura);
-  const ex = bx + dx * alcance, ey = by + dy * alcance;
-  const g = ctx.createLinearGradient(bx, by, ex, ey);
-  for (const [o, c] of paradas) g.addColorStop(o, c);
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(bx + nx * r0, by + ny * r0);
-  ctx.lineTo(ex + nx * r1, ey + ny * r1);
-  ctx.quadraticCurveTo(ex + dx * r1 * 0.6, ey + dy * r1 * 0.6, ex - nx * r1, ey - ny * r1);
-  ctx.lineTo(bx - nx * r0, by - ny * r0);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function pintarLuzLED(ctx, w, h, geo, logo, spots) {
+// forma de la luz sobre la chapa (alfa 0..1): por cada luminaria un cono muy abierto con el borde difuso,
+// más intenso cerca de la luminaria y que se desvanece de a poco hacia abajo y hacia los costados
+function mascaraLuz(w, h, spots) {
+  const [c, x] = lienzo(w, h);
   const esc = spots[0].esc;
-  // 1) haces en diagonal + una pileta cálida suave alrededor del logo
-  ctx.save();
-  if ('filter' in ctx) ctx.filter = `blur(${Math.round(18 * esc)}px)`;
+  x.globalCompositeOperation = 'lighter';
+  if ('filter' in x) x.filter = `blur(${Math.round(Math.max(w, h) * 0.025)}px)`;
   for (const s of spots) {
-    haz(ctx, s, s.dist * 1.05, 0.22, [[0, 'rgba(255,200,125,0.38)'], [0.25, 'rgba(255,172,92,0.17)'], [0.8, 'rgba(255,150,70,0.06)'], [1, 'rgba(255,150,70,0)']]);
+    const ang = Math.atan2(s.dy, s.dx); // eje del cono: hacia el logo
+    const abre = 0.82;                  // medio ángulo de apertura (~47°): luz amplia pero con forma
+    const R = Math.max(h * 1.15, w * 0.62);
+    const g = x.createRadialGradient(s.bx, s.by, 6 * esc, s.bx, s.by, R);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.25, 'rgba(0,0,0,0.88)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+    g.addColorStop(0.75, 'rgba(0,0,0,0.2)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.moveTo(s.bx, s.by);
+    x.arc(s.bx, s.by, R, ang - abre, ang + abre);
+    x.closePath();
+    x.fill();
   }
-  ctx.restore();
-  const pileta = ctx.createRadialGradient(geo.cx, geo.cy, geo.alto * 0.25, geo.cx, geo.cy, geo.alto * 0.95);
-  pileta.addColorStop(0, 'rgba(255,170,90,0.06)');
-  pileta.addColorStop(0.6, 'rgba(255,160,80,0.03)');
-  pileta.addColorStop(1, 'rgba(255,150,70,0)');
-  ctx.fillStyle = pileta;
-  ctx.fillRect(0, 0, w, h);
-  // 1b) donde el logo hace sombra no llega la luz
-  ctx.globalCompositeOperation = 'destination-out';
-  sombrasLogo(ctx, logo, geo, spots, '#000', 0.9);
-  ctx.globalCompositeOperation = 'source-over';
-  // 2) la luz NO pisa el logo: se recorta su silueta (un poco agrandada y suave)
-  const [sc, sx] = lienzo(w, h);
-  if ('filter' in sx) sx.filter = `blur(${Math.max(2, Math.round(geo.alto * 0.012))}px)`;
-  for (let a = 0; a < 12; a++) {
-    const r = geo.alto * 0.012;
-    sx.drawImage(logo, geo.x + Math.cos((a / 12) * 6.283) * r, geo.y + Math.sin((a / 12) * 6.283) * r, geo.ancho, geo.alto);
-  }
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.drawImage(sc, 0, 0, w, h);
-  ctx.globalCompositeOperation = 'source-over';
-  // 3) con la luz prendida el contorno del logo brilla más en aqua (solo el halo: el logo queda igual)
-  const [hc, hx] = lienzo(w, h);
-  hx.shadowColor = 'rgba(143,220,226,0.32)';
-  hx.shadowBlur = geo.alto * 0.045;
-  hx.drawImage(logo, geo.x, geo.y, geo.ancho, geo.alto);
-  hx.shadowColor = 'transparent';
-  hx.globalCompositeOperation = 'destination-out';
-  hx.drawImage(logo, geo.x, geo.y, geo.ancho, geo.alto);
-  ctx.drawImage(hc, 0, 0, w, h);
-  // 4) los LED prendidos
+  // luz de rebote muy tenue en toda la chapa: el borde del cono no corta a negro
+  if ('filter' in x) x.filter = 'none';
+  x.fillStyle = 'rgba(0,0,0,0.05)';
+  x.fillRect(0, 0, w, h);
+  return c;
+}
+
+function pintarLuz(ctx, w, h, logo, fotos, spots) {
+  // 1) la persiana prendida, con un tono apenas cálido (LED de 3000 K, no naranja)
+  const [pc, px] = lienzo(w, h);
+  pintar(px, w, h, logo, fotos, true);
+  px.globalCompositeOperation = 'multiply';
+  px.fillStyle = '#fff0dc';
+  px.fillRect(0, 0, w, h);
+  // 2) recortada con la forma de los conos
+  px.globalCompositeOperation = 'destination-in';
+  px.drawImage(mascaraLuz(w, h, spots), 0, 0, w, h);
+  ctx.drawImage(pc, 0, 0, w, h);
+  // 3) las luminarias encima, con el lente prendido: un punto cálido chico, sin destellos
   for (const s of spots) {
+    cuerpoLED(ctx, s);
     ctx.save();
     ctx.translate(s.bx, s.by);
     ctx.rotate(Math.atan2(s.dy, s.dx));
-    ctx.fillStyle = 'rgba(255,240,214,0.85)';
+    ctx.fillStyle = 'rgba(255,232,200,0.75)';
     ctx.beginPath();
-    ctx.ellipse(0, 0, s.radio * 0.26, s.radio * 0.75, 0, 0, 7);
+    ctx.ellipse(0, 0, s.radio * 0.24, s.radio * 0.7, 0, 0, 7);
     ctx.fill();
     ctx.restore();
-    const r = 38 * esc;
+    const r = 16 * s.esc;
     const g = ctx.createRadialGradient(s.bx, s.by, 0, s.bx, s.by, r);
-    g.addColorStop(0, 'rgba(255,236,196,0.7)');
-    g.addColorStop(0.3, 'rgba(255,176,90,0.18)');
-    g.addColorStop(1, 'rgba(255,150,60,0)');
+    g.addColorStop(0, 'rgba(255,226,186,0.35)');
+    g.addColorStop(1, 'rgba(255,200,150,0)');
     ctx.fillStyle = g;
     ctx.fillRect(s.bx - r, s.by - r, r * 2, r * 2);
   }
@@ -1512,15 +1509,15 @@ export async function persiana({ alAbrir } = {}) {
   canvas.height = h * DPR;
   const ctx = canvas.getContext('2d');
   ctx.scale(DPR, DPR);
-  const geo = pintar(ctx, w, h, logo, fotos.filter((im) => im.naturalWidth > 0));
+  const listas = fotos.filter((im) => im.naturalWidth > 0);
+  const geo = pintar(ctx, w, h, logo, listas, false); // base: la persiana en penumbra
   const spots = spotsLED(w, h, geo);
   for (const s of spots) cuerpoLED(ctx, s);
   luz.width = w * DPR;
   luz.height = h * DPR;
   const lctx = luz.getContext('2d');
   lctx.scale(DPR, DPR);
-  pintarLuzLED(lctx, w, h, geo, logo, spots);
-  luz.style.mixBlendMode = 'screen';
+  pintarLuz(lctx, w, h, logo, listas, spots); // encima: lo que iluminan las luces (mezcla normal)
 
   if (brillo) {
     const r = Math.max(geo.ancho, geo.alto) * 1.1;

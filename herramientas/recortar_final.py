@@ -5,7 +5,8 @@
 - Recorte con BiRefNet (rembg, modelo 'birefnet-general'): bordes finos y suaves.
 - Se queda con la prenda (componente más grande), saca el "halo" gris de la alfombra en los bordes
   (decontaminación de color: los píxeles del borde toman el color de la tela de al lado).
-- Realce suave: contraste local (CLAHE) + nitidez (unsharp) + un toque de saturación.
+- Color FIEL a la prenda (2026-11-18): sin CLAHE (aclaraba las sombras: el azul marino quedaba celeste y los negros
+  grises), exposición llevada a la alfombra en lineal (NIVEL) y solo nitidez. AJUSTE permite oscurecer una prenda puntual.
 - Salida: WebP con transparencia, lado mayor 1600 px, recortada al contorno.
 
 Uso:  C:/Users/tadeo/.venv-98site/Scripts/python herramientas/recortar_final.py [p01 p02 ...] [--destino carpeta]
@@ -34,6 +35,9 @@ PRINCIPALES = {
     'p09': ('9/WhatsApp Image 2026-11-15 at 01.52.15 (1).jpeg', 0),
 }
 LADO = 1600
+NIVEL = 110  # gris al que se lleva la alfombra (antes 120, quedaba todo más claro que la ropa real)
+# gamma extra por prenda (>1 oscurece los medios sin tocar blancos ni negros): la azul es más oscura en persona
+AJUSTE = {'p03': 1.22}
 MODELO = 'birefnet-general-lite'  # el completo ('birefnet-general') no entra en la memoria de esta PC
 
 _sesion = None
@@ -54,7 +58,7 @@ def abrir(rel, rot):
 
 
 def balance_alfombra(bgr):
-    """Balance de blancos + exposición midiendo la alfombra gris del borde (carta de gris)."""
+    """Balance de blancos + exposición midiendo la alfombra gris del borde (carta de gris), en lineal."""
     h, w = bgr.shape[:2]
     lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
     croma = np.hypot(lab[..., 1] - 128, lab[..., 2] - 128)
@@ -65,11 +69,12 @@ def balance_alfombra(bgr):
     ref = borde & (croma < 14)
     if ref.sum() < 500:
         return bgr
-    f = bgr.astype(np.float32)
-    g = f[ref].mean(0)
-    f *= g.mean() / np.maximum(g, 1)
-    f *= 120 / max(g.mean(), 1)
-    return np.clip(f, 0, 255).astype(np.uint8)
+    g = bgr[ref].astype(np.float32).mean(0)
+    lin = (bgr.astype(np.float32) / 255) ** 2.2
+    gl = (g / 255) ** 2.2
+    lin *= gl.mean() / gl
+    lin *= ((NIVEL / 255) ** 2.2) / gl.mean()
+    return np.clip(lin ** (1 / 2.2) * 255, 0, 255).astype(np.uint8)
 
 
 def limpiar_mascara(alfa):
@@ -112,24 +117,23 @@ def descontaminar(bgr, alfa):
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def realzar(bgr):
-    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
-    lab[..., 0] = cv2.createCLAHE(1.5, (8, 8)).apply(lab[..., 0])
-    out = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-    suave = cv2.GaussianBlur(out, (0, 0), 1.4)
-    out = cv2.addWeighted(out, 1.45, suave, -0.45, 0)  # nitidez
-    hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
-    hsv[..., 1] = np.clip(hsv[..., 1] * 1.06, 0, 255)
-    return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+def realzar(bgr, gamma=1.0):
+    suave = cv2.GaussianBlur(bgr, (0, 0), 1.4)
+    out = cv2.addWeighted(bgr, 1.35, suave, -0.35, 0)  # solo nitidez: no cambia el tono
+    if gamma != 1.0:
+        tabla = (255 * (np.arange(256) / 255) ** gamma).astype(np.uint8)
+        out = cv2.LUT(out, tabla)
+    return out
 
 
-def procesar(im_rgb):
+def procesar(im_rgb, gamma=1.0, alfa=None):
     """Imagen PIL RGB → RGBA (np, BGRA) recortada al contorno de la prenda."""
     bgr = cv2.cvtColor(np.array(im_rgb), cv2.COLOR_RGB2BGR)
     bgr = balance_alfombra(bgr)
-    rgba = np.array(remove(Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)), session=sesion(), post_process_mask=False))
-    alfa = limpiar_mascara(rgba[..., 3].copy())
-    color = realzar(descontaminar(bgr, alfa))
+    if alfa is None:
+        rgba = np.array(remove(Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)), session=sesion(), post_process_mask=False))
+        alfa = limpiar_mascara(rgba[..., 3].copy())
+    color = realzar(descontaminar(bgr, alfa), gamma)
     x, y, w, h = cv2.boundingRect((alfa > 10).astype(np.uint8))
     m = 6
     x0, y0 = max(0, x - m), max(0, y - m)
@@ -145,12 +149,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('ids', nargs='*')
     ap.add_argument('--destino', default=str(BASE / 'final' / 'img' / 'prendas'))
+    ap.add_argument('--alfas', help='carpeta con máscaras pNN.png ya calculadas (evita correr el modelo, que tarda ~5 min por foto)')
     args = ap.parse_args()
     destino = pathlib.Path(args.destino)
     destino.mkdir(parents=True, exist_ok=True)
     for pid in args.ids or PRINCIPALES:
         rel, rot = PRINCIPALES[pid]
-        out = procesar(abrir(rel, rot))
+        fa = pathlib.Path(args.alfas) / f'{pid}.png' if args.alfas else None
+        alfa = np.array(Image.open(fa)) if fa and fa.exists() else None
+        out = procesar(abrir(rel, rot), AJUSTE.get(pid, 1.0), alfa)
         rgba = cv2.cvtColor(out, cv2.COLOR_BGRA2RGBA)
         Image.fromarray(rgba).save(destino / f'{pid}.webp', 'WEBP', quality=92, method=6)
         print(pid, out.shape[1], 'x', out.shape[0], flush=True)

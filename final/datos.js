@@ -3,24 +3,24 @@ export const WHATSAPP = '5491131635898';
 export const INSTAGRAM = 'https://instagram.com/98.vintage'; // ← usuario real
 
 export const PRODUCTOS = [
-  { id: 'p03', nombre: 'Billabong Pinstripe Navy', precio: 42000, talles: { 30: 0, 32: 1, 34: 0 }, detalles: 3, video: false,
-    info: ['Boardshort Billabong original, años 2000', 'Rayado fino azul marino con paneles blancos', 'Cordón y bolsillo trasero con logo bordado'] },
-  { id: 'p06', nombre: 'Metallica × Billabong Gold', precio: 58000, antes: 72000, talles: { 32: 1, 34: 1 }, detalles: 1, video: false,
+  { id: 'p03', nombre: 'Billabong Azul', precio: 28000, talles: { 30: 2, 36: 1 }, detalles: 3, video: false,
+    info: ['Malla Billabong original, años 2000', 'Rayado fino azul marino con paneles blancos', 'Cordón y bolsillo trasero con logo bordado'] },
+  { id: 'p06', nombre: 'Metallica × Billabong Gold', precio: 25000, talles: { 36: 1 }, detalles: 1, video: false,
     info: ['Colaboración oficial Metallica × Billabong', 'Estampa dorada, base negra', 'Bolsillo cargo con velcro'] },
-  { id: 'p02', nombre: 'Billabong Pinstripe Rojo', precio: 42000, talles: { 30: 1, 32: 0 }, detalles: 2, video: true,
-    info: ['Boardshort Billabong vintage', 'Rojo con rayado fino y franjas negras', 'Logo script bordado en la pierna'] },
-  { id: 'p04', nombre: 'Metallica × Billabong Eyes', precio: 61000, antes: 76000, talles: { 34: 1 }, detalles: 2, video: false,
+  { id: 'p02', nombre: 'Billabong Rojo', precio: 30000, talles: { 34: 1 }, detalles: 1, video: true,
+    info: ['Malla Billabong vintage', 'Rojo con rayado fino y franjas negras', 'Logo script bordado en la pierna'] },
+  { id: 'p04', nombre: 'Metallica × Billabong Eyes', precio: 30000, talles: { 30: 1, 36: 1, 38: 1, 40: 1 }, detalles: 2, video: false,
     info: ['Colaboración Metallica × Billabong', 'Estampa fotográfica en grises', 'Pieza difícil de conseguir'] },
-  { id: 'p08', nombre: 'Split Anime', precio: 39000, antes: 52000, talles: { 32: 1, 34: 1, 36: 0 }, detalles: 2, video: true,
+  { id: 'p08', nombre: 'Split Streetwear', precio: 26000, talles: { 30: 1, 32: 1 }, detalles: 2, video: true,
     info: ['Diseño partido: anime y camuflaje desgastado', 'Bolsillo con ojales metálicos', 'Tela de secado rápido'] },
-  { id: 'p07', nombre: 'Metallica × Billabong Aqua', precio: 58000, talles: { 32: 1 }, detalles: 1, video: false,
+  { id: 'p07', nombre: 'Metallica × Billabong Aqua', precio: 25000, talles: { 36: 1 }, detalles: 1, video: false,
     info: ['Colaboración Metallica × Billabong', 'Estampa turquesa sobre negro', 'Cintura con cordón'] },
-  { id: 'p05', nombre: 'Authentic & Original', precio: 36000, talles: { 30: 1, 32: 1 }, detalles: 2, video: true,
-    info: ['Boardshort rojo con franjas blancas', 'Tipografía manuscrita en toda la pieza', 'Cierre con botones a presión'] },
-  { id: 'p09', nombre: 'Metallica × Billabong Chalk', precio: 58000, talles: { 34: 1, 36: 1 }, detalles: 2, video: true,
+  { id: 'p05', nombre: 'Hang Loose', precio: 28000, talles: { 30: 1, 32: 1, 36: 1 }, detalles: 2, video: true,
+    info: ['Malla roja con franjas blancas', 'Tipografía manuscrita en toda la pieza', 'Cierre con botones a presión'] },
+  { id: 'p09', nombre: 'Metallica × Billabong Camuflada', precio: 27500, talles: { 34: 1 }, detalles: 2, video: true,
     info: ['Colaboración Metallica × Billabong', 'Estampa blanca tipo tiza', 'Bolsillo lateral'] },
-  { id: 'p01', nombre: 'Patchwork Gris', precio: 34000, talles: { 30: 1 }, detalles: 2, video: true,
-    info: ['Boardshort de paneles: gris, negro y escocés', 'Bordado script en la pierna', 'Cintura con cordón'] },
+  { id: 'p01', nombre: 'Taverniti', precio: 25000, talles: { S: 1 }, detalles: 2, video: true,
+    info: ['Malla de paneles: gris, negro y escocés', 'Bordado script en la pierna', 'Talle S (equivale a 32/33)'] },
 ];
 
 // marca para los filtros de la colección
@@ -36,6 +36,8 @@ export const GUIA_TALLES = [
   { talle: '32', a: 40.5, b: 50 },
   { talle: '34', a: 43, b: 51 },
   { talle: '36', a: 45.5, b: 52 },
+  { talle: '38', a: 48, b: 53 },
+  { talle: '40', a: 50.5, b: 54 },
 ];
 
 export const INFO_TIENDA = [
@@ -72,6 +74,9 @@ export const precio = (n) => '$' + n.toLocaleString('es-AR');
 export const PAGOS = { cuotas: 3, transferencia: 0.1 };
 export const conTransferencia = (n) => Math.round((n * (1 - PAGOS.transferencia)) / 100) * 100;
 export const cuota = (n) => Math.round(n / PAGOS.cuotas);
+// Oferta del carrito: llevando OFERTA.cantidad mallas o más, OFERTA.descuento sobre el total.
+export const OFERTA = { cantidad: 2, descuento: 0.1 };
+export const ahorroOferta = (subtotal, n) => (n >= OFERTA.cantidad ? Math.round((subtotal * OFERTA.descuento) / 100) * 100 : 0);
 export const descuento = (p) => (p.antes ? Math.round((1 - p.precio / p.antes) * 100) : 0);
 export const foto = (p) => `img/prendas/${p.id}.webp`;
 export const galeria = (p) => [

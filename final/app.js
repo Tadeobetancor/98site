@@ -1,4 +1,4 @@
-import { PRODUCTOS, WHATSAPP, INSTAGRAM, INFO_TIENDA, GUIA_TALLES, PAGOS, precio, foto, galeria, marca, conTransferencia, cuota, descuento } from './datos.js';
+import { PRODUCTOS, WHATSAPP, INSTAGRAM, INFO_TIENDA, GUIA_TALLES, PAGOS, precio, foto, galeria, marca, conTransferencia, cuota, descuento, OFERTA, ahorroOferta } from './datos.js';
 import { iniciarPared } from './pared.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -71,7 +71,7 @@ $('.perchero').classList.add('fondo-' + FONDO);
 const pared = FONDO === 'pared' ? iniciarPared($('.perchero')) : { glitch() {} };
 
 // ---------- links de redes ----------
-$$('[data-whatsapp]').forEach((a) => (a.href = wa('¡Hola 98 District! Tengo una consulta')));
+$$('[data-whatsapp]').forEach((a) => (a.href = wa('¡Hola! Tengo una consulta')));
 $$('[data-instagram]').forEach((a) => (a.href = INSTAGRAM));
 
 // ---------- glitch corto: al tocar el logo / las flechas, y en el logo cada 5 segundos ----------
@@ -161,21 +161,39 @@ function pintarCarrito() {
       return `<li><img src="${foto(p)}" alt=""><div><b>${p.nombre}</b><small>Talle ${it.talle} · ${precio(p.precio)}</small></div><button type="button" data-quitar="${i}">Quitar</button></li>`;
     })
     .join('');
-  const total = carrito.reduce((s, it) => s + prod(it.id).precio, 0);
+  const subtotal = carrito.reduce((s, it) => s + prod(it.id).precio, 0);
+  const ahorro = ahorroOferta(subtotal, carrito.length);
+  const total = subtotal - ahorro;
+  const pct = Math.round(OFERTA.descuento * 100);
+  const faltan = OFERTA.cantidad - carrito.length;
+  // banda de la oferta: cuánto falta para el combo o cuánto se ahorra
+  const oferta = $('.carrito-oferta');
+  oferta.classList.toggle('activa', ahorro > 0);
+  oferta.style.setProperty('--avance', Math.min(1, carrito.length / OFERTA.cantidad));
+  $('.carrito-oferta-texto').innerHTML = ahorro > 0
+    ? `<b>Combo activado</b> · ahorrás ${precio(ahorro)}`
+    : carrito.length === 0
+      ? `Llevate ${OFERTA.cantidad} mallas y tenés <b>${pct}% OFF</b>`
+      : `Sumá ${faltan === 1 ? 'otra malla' : faltan + ' mallas más'} y tenés <b>${pct}% OFF</b> en todo`;
+  $('.carrito-subtotal').hidden = $('.carrito-ahorro').hidden = ahorro === 0;
+  $('.carrito-subtotal b').textContent = precio(subtotal);
+  $('.carrito-ahorro span').textContent = `Combo ${OFERTA.cantidad}+ mallas · ${pct}% OFF`;
+  $('.carrito-ahorro b').textContent = '−' + precio(ahorro);
   $('.carrito-total b').textContent = precio(total);
   $('.carrito-n').textContent = carrito.length ? `(${carrito.length})` : '';
   $('.carrito-vacio').hidden = carrito.length > 0;
   $('.carrito-panel > footer').hidden = carrito.length === 0;
   cuenta.hidden = carrito.length === 0;
   cuenta.textContent = carrito.length;
-  const texto = '¡Hola 98 District! Quiero comprar:\n' +
+  const texto = '¡Hola! Quiero comprar:\n' +
     carrito.map((it) => { const p = prod(it.id); return `• ${p.nombre} (talle ${it.talle}) ${precio(p.precio)}`; }).join('\n') +
+    (ahorro ? `\nSubtotal: ${precio(subtotal)}\nCombo ${pct}% OFF: −${precio(ahorro)}` : '') +
     `\nTotal: ${precio(total)}`;
   $('.carrito-enviar').href = wa(texto);
   const sugeridas = PRODUCTOS.filter((p) => !carrito.some((it) => it.id === p.id)).slice(0, 2);
   $('.carrito-combina').hidden = carrito.length === 0 || sugeridas.length === 0;
   $('.carrito-combina-lista').innerHTML = sugeridas
-    .map((p) => `<button type="button" data-sugerida="${p.id}"><img src="${foto(p)}" alt=""><span><b>${p.nombre}</b><small>${precio(p.precio)}</small></span></button>`)
+    .map((p) => `<button type="button" data-sugerida="${p.id}"><img src="${foto(p)}" alt=""><span><b>${p.nombre}</b><small>${precio(p.precio)}</small>${faltan === 1 ? `<em>Activa el ${pct}% OFF</em>` : ''}</span></button>`)
     .join('');
 }
 
@@ -184,7 +202,7 @@ function abrirCarrito() {
   document.body.classList.add('bloqueado');
   animar(capaCarrito, [{ opacity: 0 }, { opacity: 1 }], 350);
   animar(panelCarrito, [{ transform: 'translateX(100%)' }, { transform: 'none' }], 650);
-  cascada([...$$('.carrito-panel > header, .carrito-lista li, .carrito-vacio, .carrito-combina, .carrito-panel > footer')].filter((x) => !x.hidden), { desde: 'translateX(28px)', espera: 160, paso: 60 });
+  cascada([...$$('.carrito-panel > header, .carrito-oferta, .carrito-lista li, .carrito-vacio, .carrito-combina, .carrito-panel > footer')].filter((x) => !x.hidden), { desde: 'translateX(28px)', espera: 160, paso: 60 });
 }
 async function cerrarCarrito() {
   if (capaCarrito.hidden) return;
@@ -248,11 +266,15 @@ function agregar(p, talle, desde, alTerminar) {
 // ---------- tarjetas de producto ----------
 function tarjeta(p, i = 0) {
   const talles = tallesDisponibles(p);
-  const otra = p.detalles ? `<img class="tarjeta-otra" src="img/detalles/${p.id}-1.jpg" alt="" loading="lazy">` : '';
+  // todas las fotos de la malla (sin el video): se pasan deslizando con el dedo o con las flechas en compu
+  const fotos = galeria(p).filter((src) => !src.endsWith('.mp4'));
+  const varias = fotos.length > 1;
   return `
   <article class="tarjeta revelar" data-id="${p.id}" style="transition-delay:${(i % 3) * 70}ms">
     <div class="tarjeta-foto">
-      <img src="${foto(p)}" alt="${p.nombre}" loading="lazy" decoding="async">${otra}
+      <div class="tarjeta-pista">${fotos.map((src, k) => `<figure class="tarjeta-lamina"><img src="${src}" alt="${k ? '' : p.nombre}" class="${k ? '' : 'recorte'}" loading="lazy" decoding="async"></figure>`).join('')}</div>
+      ${varias ? `<button class="tarjeta-nav ant" type="button" aria-label="Foto anterior" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg></button><button class="tarjeta-nav sig" type="button" aria-label="Foto siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5l7 7-7 7"/></svg></button>
+      <div class="tarjeta-puntos" aria-hidden="true">${fotos.map((_, k) => `<i${k ? '' : ' class="on"'}></i>`).join('')}</div>` : ''}
       <div class="tarjeta-rapido"><small>Añadir</small><div>${talles.map((t) => `<button type="button" data-rapido="${t}">${t}</button>`).join('')}</div></div>
     </div>
     <div class="tarjeta-texto">
@@ -262,7 +284,29 @@ function tarjeta(p, i = 0) {
     </div>
   </article>`;
 }
+// flechas de la tarjeta: pasan de foto sin abrir la ficha
+function navTarjeta(e) {
+  const b = e.target.closest('.tarjeta-nav');
+  if (!b) return false;
+  const pista = b.closest('.tarjeta-foto').querySelector('.tarjeta-pista');
+  const i = Math.round(pista.scrollLeft / pista.clientWidth) + (b.classList.contains('sig') ? 1 : -1);
+  pista.scrollTo({ left: i * pista.clientWidth, behavior: 'smooth' });
+  return true;
+}
+// al deslizar (dedo o flecha) se actualizan los puntitos y qué flecha se puede usar
+document.addEventListener('scroll', (e) => {
+  const pista = e.target;
+  if (!pista.classList?.contains('tarjeta-pista')) return;
+  const foto = pista.parentElement;
+  const n = pista.children.length;
+  const i = Math.min(n - 1, Math.round(pista.scrollLeft / Math.max(1, pista.clientWidth)));
+  foto.querySelectorAll('.tarjeta-puntos i').forEach((p, k) => p.classList.toggle('on', k === i));
+  const ant = foto.querySelector('.tarjeta-nav.ant'), sig = foto.querySelector('.tarjeta-nav.sig');
+  if (ant) ant.disabled = i === 0;
+  if (sig) sig.disabled = i === n - 1;
+}, { capture: true, passive: true });
 function clicTarjeta(e) {
+  if (navTarjeta(e)) return;
   const t = e.target.closest('.tarjeta');
   if (!t) return;
   const p = prod(t.dataset.id);
@@ -412,6 +456,7 @@ export function abrirFicha(p, origen = null) {
   $('.ficha-descuento').hidden = !p.antes;
   $('.pago-cuotas').innerHTML = `<b>${PAGOS.cuotas} cuotas sin interés</b> de ${precio(cuota(p.precio))}`;
   $('.pago-transferencia').innerHTML = `<b>${precio(conTransferencia(p.precio))}</b> con transferencia`;
+  $('.pago-combo').innerHTML = `<b>Llevate ${OFERTA.cantidad} y tenés ${Math.round(OFERTA.descuento * 100)}% OFF</b> en el carrito`;
   $('.ficha-detalles').innerHTML = p.info.map((t) => `<li>${t}</li>`).join('');
   $('.ficha-talles').innerHTML = talles
     .map(([t, s]) => `<button type="button" data-talle="${t}" ${s ? '' : 'disabled'} aria-pressed="${t === talleElegido}">${t}</button>`)
@@ -518,6 +563,7 @@ $('.ficha-agregar').addEventListener('click', () => {
 });
 $('.grilla-relacionados').addEventListener('click', (e) => {
   if (e.target.closest('[data-rapido]')) return clicTarjeta(e);
+  if (navTarjeta(e)) return;
   const t = e.target.closest('.tarjeta');
   if (t) abrirFicha(prod(t.dataset.id)); // ya está abierta: cambia de malla con un fundido
 });
@@ -530,6 +576,8 @@ const visorPista = $('.visor-pista');
 function contadorVisor() {
   const i = Math.round(visorPista.scrollLeft / visorPista.clientWidth);
   $('.visor-contador').textContent = `${i + 1} / ${laminas.length}`;
+  $('.visor-nav.ant').disabled = i === 0;
+  $('.visor-nav.sig').disabled = i === laminas.length - 1;
 }
 function abrirVisor(i, desde) {
   visorPista.innerHTML = laminas.map((src) => `<div class="visor-lamina">${src.endsWith('.mp4')
@@ -569,6 +617,13 @@ visorPista.addEventListener('pointermove', (e) => {
   lam.querySelector('img').style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
 });
 $('.visor .cerrar').addEventListener('click', cerrarVisor);
+function pasarVisor(d) {
+  const i = Math.round(visorPista.scrollLeft / Math.max(1, visorPista.clientWidth)) + d;
+  visorPista.querySelectorAll('.visor-lamina.zoom').forEach((l) => l.classList.remove('zoom'));
+  visorPista.scrollTo({ left: Math.max(0, Math.min(laminas.length - 1, i)) * visorPista.clientWidth, behavior: 'smooth' });
+}
+$('.visor-nav.ant').addEventListener('click', () => pasarVisor(-1));
+$('.visor-nav.sig').addEventListener('click', () => pasarVisor(1));
 
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
@@ -577,11 +632,14 @@ addEventListener('keydown', (e) => {
   }
   if (!ficha.hidden && visor.hidden && e.key === 'ArrowRight') irA(indice + 1);
   if (!ficha.hidden && visor.hidden && e.key === 'ArrowLeft') irA(indice - 1);
+  if (!visor.hidden && e.key === 'ArrowRight') pasarVisor(1);
+  if (!visor.hidden && e.key === 'ArrowLeft') pasarVisor(-1);
 });
 addEventListener('resize', () => { if (!ficha.hidden) irA(indice, false); });
 
 // ---------- avisos: una frase por vez (quieta para leerla), las letras entran rodando y cambia sola ----------
 const AVISOS = [
+  ['🔥', `Llevate ${OFERTA.cantidad} mallas y tenés ${Math.round(OFERTA.descuento * 100)}% OFF`],
   ['🌊', 'Nuevo drop · Verano 2026'],
   ['✨', 'Vintage original, elegido a mano'],
   ['📦', 'Envíos a todo el país'],
@@ -680,7 +738,7 @@ async function iniciarPerchero() {
   }
 }
 iniciarPerchero();
-// pruebas: ?ver=coleccion · ?ficha=p03 · ?carrito · ?menu · ?tip (WhatsApp estirado) · ?acordeones (ficha con todo abierto) · ?ver=pie (solo el footer)
+// pruebas: ?ver=coleccion · ?ficha=p03 · ?carrito (?carrito=2 con el combo) · ?menu · ?tip (WhatsApp estirado) · ?acordeones (ficha con todo abierto) · ?ver=pie (solo el footer)
 const params = new URLSearchParams(location.search);
 const verParam = params.get('ver');
 if (verParam) {
@@ -688,7 +746,7 @@ if (verParam) {
   if (verParam === 'pie') $('.barra').style.display = 'none'; // solo el footer, sin el header encima
 }
 if (params.get('ficha')) abrirFicha(prod(params.get('ficha')) || PRODUCTOS[0]);
-if (params.has('carrito')) { if (!carrito.length) { carrito.push({ id: 'p03', talle: '32' }); pintarCarrito(); } abrirCarrito(); }
+if (params.has('carrito')) { if (!carrito.length) { carrito.push({ id: 'p03', talle: '32' }); if (params.get('carrito') === '2') carrito.push({ id: 'p02', talle: '30' }); pintarCarrito(); } abrirCarrito(); }
 if (params.has('menu')) abrirMenu();
 if (params.has('tip')) mostrarTip(600000);
 if (params.has('abajo')) setTimeout(() => scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }), 600); // ?abajo: va al footer

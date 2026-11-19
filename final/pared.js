@@ -2,7 +2,7 @@
 // Muy suave para que las mallas sean lo que resalta. Siempre igual (semilla fija) y con un glitch corto cada tanto.
 
 const FUENTES = ['Sedgwick Ave Display', 'Permanent Marker', 'Rock Salt'];
-const PALABRAS = ['98', 'dstrct', 'salt', 'ola', 'swell', 'marea', 'locals', 'reef', 'brisa', 'drop', 'surf', 'wax', 'tide', 'love', 'crew'];
+const PALABRAS = ['98', 'netwear', 'salt', 'ola', 'swell', 'marea', 'locals', 'reef', 'brisa', 'drop', 'surf', 'wax', 'tide', 'love', 'crew'];
 
 let semilla = 1998;
 function rnd() {
