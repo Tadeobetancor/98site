@@ -3,7 +3,7 @@
 Base de conocimientos del proyecto. Todo esto ya está analizado: no hace falta volver a abrir las referencias salvo para un detalle puntual.
 
 ## Estado
-- WhatsApp del negocio: 11 3163-5898 → `5491131635898` (ya cargado en `demo/datos.js`). Falta: Instagram de 98 Vintage, precios/talles/nombres reales, foto de frente de p10.
+- WhatsApp del negocio: desde 2026-11-18 los mensajes van a FRANCISCO, +54 9 11 5124-4554 → `5491151244554` (`final/datos.js`; antes 11 3163-5898, que sigue en `demo/`). Falta: Instagram de 98 Vintage, precios/talles/nombres reales, foto de frente de p10.
 - `demo/`: demo de estructura funcionando (HTML + CSS + JS sin build, three.js por CDN). Servir con `python herramientas/servidor.py` (desde `98site/`, SIN caché: con `python -m http.server` el navegador se quedaba con módulos viejos, p. ej. la persiana) y abrir http://127.0.0.1:5198
 - Parámetros de prueba: `?sinintro` saltea la persiana · `?persiana=0.5` congela la persiana a mitad · `?ficha=p03` abre una ficha · `?ver=coleccion` muestra desde esa sección.
 - Próximo paso: el dueño revisa la demo, se ajusta la estructura y después se construye la versión final (subir el esfuerzo a high/max).
@@ -227,3 +227,5 @@ Precios, talles y nombres de la demo son INVENTADOS: pedirle los reales al clien
 - Mallas borrosas en celular: el pixel ratio 1,5 en pantallas de densidad 3 agrandaba la imagen al doble → en táctil arranca en 2 y baja solo a 1,5 si al moverse tarda >28 ms por cuadro.
 - SIN glitch en el perchero (pedido 2026-11-18): ni el espontáneo de la pared, ni al agregar al carrito, ni en las flechas. El del logo del header sigue.
 - BUG iPhone "fotos recortadas en la ficha" (captura en `../bugs/1.jpeg`): en celular `.lamina` toma su alto de `aspect-ratio` + `max-height`, y WebKit no resuelve `height: 100%` del `<img>` hijo → la foto usaba su alto propio (más alta), se corría hacia abajo (franja gris arriba) y se cortaba. Arreglo: `img`/`video` de `.lamina` y `.tarjeta-lamina` en `position: absolute; inset: 0` (las recortadas con `margin: auto` para quedar centradas). En Edge/Chromium nunca se vio: probar en iPhone.
+- BUG "toco un producto, se ve el viento y no abre": cerrar una ficha y abrir otra antes de que termine la ráfaga de cierre (900 ms) → el cierre viejo, al terminar, escondía la nueva. Arreglo: `fichaGen`/`cerrandoFicha` en `app.js` (abrir invalida el cierre en curso) y `rafagaGen` en `soplar()` (una ráfaga nueva cancela la anterior y solo la última esconde la capa). Probado con un iframe de prueba (cerrar + abrir a los 300 ms → queda abierta).
+- Apertura de la ficha SIN animaciones internas (se sacaron el deslizado de la foto, el nombre letra por letra y la cascada del texto): la ficha aparece completa detrás del frente del viento, en simultáneo. La 1ª foto con `fetchpriority="high"` y la 2ª (la que asoma en celular) sin lazy.

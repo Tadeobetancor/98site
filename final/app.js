@@ -28,8 +28,12 @@ const ANCHO_RAFAGA = 1.5;  // la banda mide 1,5 pantallas
 const FRENTE = 0.7;        // dónde está lo más denso de la espuma (0 = cola, 1 = punta)
 const curvaViento = (t) => 1 - Math.pow(1 - t, 2.1); // entra con todo y se va frenando
 // modo: 'mostrar' (la ficha aparece detrás de la ráfaga) · 'ocultar' (se la lleva) · 'pasar' (solo pasa por encima)
+let rafagaGen = 0;
 function soplar({ ms, haciaDerecha = true, el = null, modo = 'pasar' }) {
   const W = innerWidth, ancho = W * ANCHO_RAFAGA;
+  // una ráfaga nueva corta la anterior (si no, al terminar la vieja escondía la capa en medio de la nueva)
+  const gen = ++rafagaGen;
+  rafaga.getAnimations().forEach((a) => a.cancel());
   rafaga.hidden = false;
   rafaga.style.width = `${ancho}px`;
   const N = 18, cuadros = [], recortes = [];
@@ -52,7 +56,7 @@ function soplar({ ms, haciaDerecha = true, el = null, modo = 'pasar' }) {
   }
   const anim = rafaga.animate(cuadros, { duration: ms, easing: 'linear', fill: 'forwards' });
   if (el && modo !== 'pasar') animar(el, recortes, ms, { easing: 'linear' });
-  return anim.finished.catch(() => {}).then(() => { rafaga.hidden = true; });
+  return anim.finished.catch(() => {}).then(() => { if (gen === rafagaGen) rafaga.hidden = true; });
 }
 let vientoHaciaDerecha = true; // hacia dónde sopló al abrir (al cerrar vuelve para el otro lado)
 function animar(el, cuadros, ms, opciones = {}) {
@@ -440,7 +444,14 @@ function marcar(i) {
 // rectángulo → recorte (clip-path) para que la ficha se despliegue desde ahí
 const recorte = (r) => `inset(${Math.max(0, r.top)}px ${Math.max(0, innerWidth - r.left - r.width)}px ${Math.max(0, innerHeight - r.top - r.height)}px ${Math.max(0, r.left)}px)`;
 
+// fichaGen: cada apertura invalida un cierre que esté en curso. BUG que arregla: cerrar un producto y tocar otro antes
+// de que termine la ráfaga de cierre → la ficha nueva empezaba a abrirse y el cierre viejo, al terminar, la escondía
+// ("se ve la animación pero no abre").
+let fichaGen = 0, cerrandoFicha = false;
 export function abrirFicha(p, origen = null) {
+  fichaGen++;
+  const interrumpeCierre = cerrandoFicha;
+  cerrandoFicha = false;
   actual = p;
   talleElegido = null;
   origenFicha = origen;
@@ -466,7 +477,7 @@ export function abrirFicha(p, origen = null) {
   pista.innerHTML = laminas.map((src, i) => {
     const media = src.endsWith('.mp4')
       ? `<video src="${src}" muted loop playsinline preload="metadata"></video>`
-      : `<img src="${src}" alt="${p.nombre}" class="${src.includes('/prendas/') ? 'recorte' : ''}" ${i ? 'loading="lazy"' : ''}>`;
+      : `<img src="${src}" alt="${p.nombre}" class="${src.includes('/prendas/') ? 'recorte' : ''}" ${i > 1 ? 'loading="lazy"' : i === 0 ? 'fetchpriority="high"' : ''}>`; // la 1ª y la que asoma, sin esperar
     return `<figure class="lamina" data-i="${i}">${media}</figure>`;
   }).join('');
   $('.ficha-miniaturas').innerHTML = laminas
@@ -481,7 +492,7 @@ export function abrirFicha(p, origen = null) {
   $('.grilla-relacionados').innerHTML = otras.map(tarjeta).join('');
   $$('.grilla-relacionados .revelar').forEach((el) => el.classList.add('visto'));
 
-  const yaAbierta = !ficha.hidden;
+  const yaAbierta = !ficha.hidden && !interrumpeCierre;
   ficha.hidden = false;
   clearTimeout(pausaPerchero);
   pausaPerchero = setTimeout(() => percheroRef?.pausar(true), 2200);
@@ -497,25 +508,24 @@ export function abrirFicha(p, origen = null) {
     soplar({ ms: 850, haciaDerecha: vientoHaciaDerecha });
     animar(ficha, [{ opacity: 0.4 }, { opacity: 1 }], 500, { delay: 150 });
   }
-  animar($('.ficha-escenario'), [{ opacity: 0, transform: 'translateX(' + (vientoHaciaDerecha ? -40 : 40) + 'px)', filter: 'blur(8px)' }, { opacity: 1, transform: 'none', filter: 'blur(0)' }], 800, { delay: 220 });
-  const nombre = $('.ficha-nombre');
-  nombre.innerHTML = [...p.nombre].map((ch) => `<span class="letra">${ch === ' ' ? '&nbsp;' : ch}</span>`).join('');
-  $$('.letra', nombre).forEach((l, i) => animar(l, [
-    { opacity: 0, filter: 'blur(6px)', transform: `translateX(${vientoHaciaDerecha ? -14 : 14}px)` },
-    { opacity: 1, filter: 'blur(0)', transform: 'none' },
-  ], 520, { delay: 380 + i * 26 }));
-  cascada([$('.ficha-top'), ...$$('.ficha-info > *:not(.ficha-nombre)')].slice(0, 10), { desde: `translateX(${vientoHaciaDerecha ? -18 : 18}px)`, espera: 420, paso: 40 });
+  // Nada más se mueve adentro: la ficha aparece COMPLETA y quieta justo detrás del frente de la ráfaga (antes la foto,
+  // el nombre letra por letra y el texto entraban después de que pasaba el viento y se veía la página "armándose").
+  [$('.ficha-escenario'), $('.ficha-top'), ...$$('.ficha-info > *')].forEach((x) => x.getAnimations().forEach((a) => a.cancel()));
 }
 
 // rendimiento: con la ficha tapando toda la pantalla, el perchero 3D deja de dibujarse (vuelve antes de cerrarla)
 let percheroRef = null, pausaPerchero = null;
 async function cerrarFicha(rapido = false) {
-  if (ficha.hidden) return;
+  if (ficha.hidden || cerrandoFicha) return;
+  const gen = fichaGen;
+  cerrandoFicha = true;
   clearTimeout(pausaPerchero);
   percheroRef?.pausar(false);
   $$('.ficha video').forEach((v) => v.pause());
   // se cierra con la misma ráfaga, soplando para el otro lado: el viento "se lleva" la ficha
   await soplar({ ms: rapido ? 750 : 900, haciaDerecha: !vientoHaciaDerecha, el: ficha, modo: 'ocultar' });
+  if (gen !== fichaGen) return; // mientras se cerraba se abrió otra malla: esa queda abierta
+  cerrandoFicha = false;
   ficha.hidden = true;
   ficha.getAnimations().forEach((a) => a.cancel());
   desbloquear();

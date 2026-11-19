@@ -1,5 +1,5 @@
 // Catálogo provisorio de la demo. Nombres, precios y talles son de ejemplo: se reemplazan por los reales.
-export const WHATSAPP = '5491131635898';
+export const WHATSAPP = '5491151244554'; // Francisco: +54 9 11 5124-4554 (antes 11 3163-5898)
 export const INSTAGRAM = 'https://instagram.com/98.vintage'; // ← usuario real
 
 export const PRODUCTOS = [
