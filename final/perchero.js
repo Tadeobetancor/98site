@@ -236,8 +236,12 @@ function medirCintura(data, w, h) {
   return { arriba: y0 / h, izq: izq / w, der: (der + 1) / w };
 }
 
+// celular/tablet (dedo): sin antialias por hardware (MSAA es lo que más le cuesta a la GPU del celular y con pantallas
+// de alta densidad casi no se nota), mallas con menos vértices y 20 cuadros por segundo en reposo
+const TACTIL = matchMedia('(pointer: coarse)').matches;
+
 export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ antialias: !TACTIL, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // más de 1,5 no se nota y cuesta casi el doble
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // Neutral (Khronos PBR Neutral): respeta el color de la foto. El ACES de antes corría los tonos (el azul marino
@@ -314,7 +318,7 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
       // dos se juntan (como la costura), así de costado se ve el grosor y las luces lo sombrean como algo con cuerpo.
       const campo = campoProfundidad(item.alfa.data, c.width, c.height);
       const GROSOR = 0.085 * (ancho / ANCHO_MAX); // por cara
-      const segX = 64, segY = Math.max(24, Math.round(segX / asp));
+      const segX = TACTIL ? 40 : 64, segY = Math.max(24, Math.round(segX / asp));
       const superficie = (signo, factor) => {
         const geo = new THREE.PlaneGeometry(ancho, alto, segX, segY);
         const pos = geo.attributes.position, uv = geo.attributes.uv;
@@ -581,7 +585,7 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
     // en reposo (solo la brisa, que es lentísima) alcanza con 30 cuadros por segundo; al moverse, 60
     cuadro++;
     const quieto = !seleccion && !arr.abajo && Math.abs(foco.v) < 0.02 && Math.abs(foco.x - focoObj) < 0.002 && items.every((it) => Math.abs(it.vaiven.v) < 0.004 && Math.abs(it.vaiven.x) < 0.002);
-    if (quieto && cuadro % 2) return;
+    if (quieto && cuadro % (TACTIL ? 3 : 2)) return;
     const dt = Math.max(1e-3, Math.min(0.04, (t - ultimo) / 1000));
     ultimo = t;
     tiempo += dt;
