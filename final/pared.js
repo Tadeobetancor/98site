@@ -65,6 +65,10 @@ function difuminada(img, ancho) {
   if ('filter' in x) x.filter = 'grayscale(1) contrast(1.1)';
   x.drawImage(img, 0, 0, w, h);
   x.filter = 'none';
+  // a gris también en Safari (que ignora ctx.filter): modo 'saturation' con un gris neutro
+  x.globalCompositeOperation = 'saturation';
+  x.fillStyle = '#808080';
+  x.fillRect(0, 0, w, h);
   x.globalCompositeOperation = 'destination-in';
   const g = x.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.55);
   g.addColorStop(0, 'rgba(0,0,0,1)');
@@ -164,7 +168,6 @@ export function iniciarPared(contenedor) {
     };
     cuadro();
   }
-  const programar = () => setTimeout(() => { if (!document.hidden) disparar(); programar(); }, 6000 + Math.random() * 6000);
-  programar();
-  return { glitch: disparar };
+  // sin glitch en el perchero (pedido del dueño, 2026-11-18): la pared queda quieta
+  return { glitch() {} };
 }

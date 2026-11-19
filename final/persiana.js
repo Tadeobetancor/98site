@@ -32,6 +32,36 @@ const azar = (a, b) => a + rnd() * (b - a);
 const elegir = (arr) => arr[(rnd() * arr.length) | 0];
 const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
 let DPR = 1;
+// Safari (iPhone) no aplica ctx.filter: sin esto la persiana "en penumbra" salía igual de clara que la prendida
+// (toda la pantalla luminosa y solo titilaba el logo). Se detecta de verdad y, si no anda, se usan equivalentes:
+// velo negro + modo 'saturation' en vez de brightness/saturate, y dibujar en chiquito y agrandar en vez de blur.
+// prueba: ?sinfiltro simula Safari en la compu
+const FILTRO_OK = !new URLSearchParams(location.search).has('sinfiltro') && (() => {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    const x = c.getContext('2d');
+    x.filter = 'brightness(0)';
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, 1, 1);
+    return x.getImageData(0, 0, 1, 1).data[0] < 128;
+  } catch { return false; }
+})();
+// oscurece y apaga el color de lo ya pintado (equivale a saturate(sat) brightness(bri))
+function apagar(ctx, w, h, bri, sat) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  if (sat < 1) {
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = `rgba(128,128,128,${1 - sat})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = `rgba(0,0,0,${1 - bri})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
 
 // canvas auxiliar en coordenadas lógicas (nítido en pantallas retina)
 function lienzo(w, h) {
@@ -1306,9 +1336,10 @@ function pintar(ctx, w, h, logo, fotos, prendida = true) {
     const mw = mural.width * e, mh = mural.height * e;
     ctx.save();
     // apagada = penumbra de la calle; prendida = lo que ven las luces (igual de oscura que antes, nunca más clara)
-    if ('filter' in ctx) ctx.filter = prendida ? 'saturate(0.9) brightness(0.8) contrast(1.06)' : 'saturate(0.75) brightness(0.36) contrast(1.04)';
+    if (FILTRO_OK) ctx.filter = prendida ? 'saturate(0.9) brightness(0.8) contrast(1.06)' : 'saturate(0.75) brightness(0.36) contrast(1.04)';
     ctx.drawImage(mural, (w - mw) / 2, (h - mh) * 0.45, mw, mh);
     ctx.restore();
+    if (!FILTRO_OK) apagar(ctx, w, h, prendida ? 0.8 : 0.36, prendida ? 0.9 : 0.75);
   }
 
   // 7) un poco de óxido encima de la pintura (está pintado sobre chapa) + viñeta
@@ -1326,7 +1357,8 @@ function pintar(ctx, w, h, logo, fotos, prendida = true) {
   const [lc, lx] = lienzo(w, h);
   logoGrafiti(lx, logo, geo);
   ctx.save();
-  if (!prendida && 'filter' in ctx) ctx.filter = 'brightness(0.5) saturate(0.8)';
+  if (!prendida && FILTRO_OK) ctx.filter = 'brightness(0.5) saturate(0.8)';
+  else if (!prendida) apagar(lx, w, h, 0.5, 1); // (sin 'saturation': sobre lo transparente pintaría gris)
   ctx.drawImage(lc, 0, 0, w, h);
   ctx.restore();
   lamas(ctx, w, h - pie, paso);
@@ -1343,16 +1375,17 @@ function pintar(ctx, w, h, logo, fotos, prendida = true) {
 // Sombras del logo según las luces: cada luminaria proyecta la sombra del logo hacia el lado contrario.
 function sombrasLogo(ctx, logo, geo, spots, color, alfa) {
   const sil = document.createElement('canvas');
-  sil.width = logo.width;
-  sil.height = logo.height;
+  const red = FILTRO_OK ? 1 : 1 / 14;
+  sil.width = Math.max(4, Math.round(logo.width * red));
+  sil.height = Math.max(4, Math.round(logo.height * red));
   const b = sil.getContext('2d');
-  b.drawImage(logo, 0, 0);
+  b.drawImage(logo, 0, 0, sil.width, sil.height);
   b.globalCompositeOperation = 'source-in';
   b.fillStyle = color;
   b.fillRect(0, 0, sil.width, sil.height);
   const largo = geo.alto * 0.06;
   ctx.save();
-  if ('filter' in ctx) ctx.filter = `blur(${Math.max(3, Math.round(geo.alto * 0.022))}px)`;
+  if (FILTRO_OK) ctx.filter = `blur(${Math.max(3, Math.round(geo.alto * 0.022))}px)`;
   ctx.globalAlpha = alfa;
   for (const s of spots) ctx.drawImage(sil, geo.x + s.dx * largo, geo.y + s.dy * largo, geo.ancho, geo.alto);
   ctx.restore();
@@ -1397,10 +1430,28 @@ function cuerpoLED(ctx, s) {
 // forma de la luz sobre la chapa (alfa 0..1): por cada luminaria un cono muy abierto con el borde difuso,
 // más intenso cerca de la luminaria y que se desvanece de a poco hacia abajo y hacia los costados
 function mascaraLuz(w, h, spots) {
+  if (!FILTRO_OK) {
+    // sin filtro: los conos se dibujan en un canvas chico y al agrandarlo quedan con el borde suave
+    const k = 1 / 16;
+    const chico = document.createElement('canvas');
+    chico.width = Math.ceil(w * k);
+    chico.height = Math.ceil(h * k);
+    const cx = chico.getContext('2d');
+    cx.scale(k, k);
+    conosLuz(cx, w, h, spots);
+    const [c, x] = lienzo(w, h);
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(chico, 0, 0, w, h);
+    return c;
+  }
   const [c, x] = lienzo(w, h);
+  x.filter = `blur(${Math.round(Math.max(w, h) * 0.025)}px)`;
+  conosLuz(x, w, h, spots);
+  return c;
+}
+function conosLuz(x, w, h, spots) {
   const esc = spots[0].esc;
   x.globalCompositeOperation = 'lighter';
-  if ('filter' in x) x.filter = `blur(${Math.round(Math.max(w, h) * 0.025)}px)`;
   for (const s of spots) {
     const ang = Math.atan2(s.dy, s.dx); // eje del cono: hacia el logo
     const abre = 0.82;                  // medio ángulo de apertura (~47°): luz amplia pero con forma
@@ -1419,10 +1470,9 @@ function mascaraLuz(w, h, spots) {
     x.fill();
   }
   // luz de rebote muy tenue en toda la chapa: el borde del cono no corta a negro
-  if ('filter' in x) x.filter = 'none';
+  x.filter = 'none';
   x.fillStyle = 'rgba(0,0,0,0.05)';
   x.fillRect(0, 0, w, h);
-  return c;
 }
 
 function pintarLuz(ctx, w, h, logo, fotos, spots) {
@@ -1527,6 +1577,7 @@ export async function persiana({ alAbrir } = {}) {
 
   const arriba = 'translate3d(0, calc(-100% - 40px), 0)';
   if (congelada !== null) {
+    if (params.has('apagada')) luz.style.opacity = '0'; // prueba: ?persiana=0&apagada muestra la persiana con las luces apagadas
     hoja.style.transform = `translate3d(0, ${-congelada * 100}%, 0)`;
     alAbrir?.();
     return;

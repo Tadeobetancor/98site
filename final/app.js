@@ -82,7 +82,7 @@ function glitch(el) {
   setTimeout(() => el.classList.remove('glitcheando'), 420);
 }
 document.addEventListener('pointerdown', (e) => {
-  const el = e.target.closest('.barra-logo img, .perchero-flecha');
+  const el = e.target.closest('.barra-logo img');
   if (el) glitch(el);
 });
 setInterval(() => { if (!document.hidden) glitch($('.barra-logo img')); }, 5000);
@@ -250,7 +250,6 @@ function volarAlCarrito(src, desde, alTerminar) {
     cuenta.classList.remove('salta');
     void cuenta.offsetWidth;
     cuenta.classList.add('salta');
-    pared.glitch(true);
     alTerminar?.();
   };
 }

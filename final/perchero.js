@@ -145,6 +145,18 @@ function crearPercha(cintura, pinzas, mats) {
 }
 
 // sombra suave de la prenda sobre la pared (silueta desenfocada)
+// ¿el navegador aplica ctx.filter? (Safari no)
+const FILTRO_OK = (() => {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    const x = c.getContext('2d');
+    x.filter = 'brightness(0)';
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, 1, 1);
+    return x.getImageData(0, 0, 1, 1).data[0] < 128;
+  } catch { return false; }
+})();
 function texturaSombra(img) {
   const w = 220, h = Math.round(220 * (img.height / img.width)), pad = 30;
   const a = document.createElement('canvas');
@@ -157,8 +169,17 @@ function texturaSombra(img) {
   const c = document.createElement('canvas');
   c.width = w + pad * 2; c.height = h + pad * 2;
   const cx = c.getContext('2d');
-  if ('filter' in cx) cx.filter = 'blur(12px)';
-  cx.drawImage(a, pad, pad);
+  if (FILTRO_OK) {
+    cx.filter = 'blur(12px)';
+    cx.drawImage(a, pad, pad);
+  } else {
+    // Safari no aplica ctx.filter: se achica la silueta y se agranda (queda igual de difuminada)
+    const k = 0.09, ch = document.createElement('canvas');
+    ch.width = Math.ceil(c.width * k); ch.height = Math.ceil(c.height * k);
+    ch.getContext('2d').drawImage(a, pad * k, pad * k, w * k, h * k);
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(ch, 0, 0, c.width, c.height);
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return { t, escala: (w + pad * 2) / w };
@@ -242,7 +263,10 @@ const TACTIL = matchMedia('(pointer: coarse)').matches;
 
 export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
   const renderer = new THREE.WebGLRenderer({ antialias: !TACTIL, alpha: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // más de 1,5 no se nota y cuesta casi el doble
+  // compu: 1,5 alcanza. Celular: las pantallas son de densidad 2-3 y con 1,5 la imagen se agrandaba al doble y las
+  // mallas se veían borrosas → arranca en 2 y, si el teléfono no llega a dibujar fluido al moverse, baja solo a 1,5
+  let resolucion = TACTIL ? Math.min(devicePixelRatio, 2) : Math.min(devicePixelRatio, 1.5);
+  renderer.setPixelRatio(resolucion);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // Neutral (Khronos PBR Neutral): respeta el color de la foto. El ACES de antes corría los tonos (el azul marino
   // se iba a violeta/celeste) y desaturaba; con este, lo que se ve es el color real de la malla.
@@ -576,7 +600,7 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
   let activo = true, tiempo = 0, ultimo = performance.now();
   new IntersectionObserver(([e]) => (activo = e.isIntersecting)).observe(contenedor);
 
-  let pausado = false, cuadro = 0;
+  let pausado = false, cuadro = 0, lento = 0;
   function bucle(t) {
     requestAnimationFrame(bucle);
     // no se dibuja si no se ve: fuera de pantalla, pestaña oculta o tapado por la persiana / la ficha
@@ -586,8 +610,14 @@ export function crearPerchero(contenedor, productos, { alAbrir, alCentrar }) {
     cuadro++;
     const quieto = !seleccion && !arr.abajo && Math.abs(foco.v) < 0.02 && Math.abs(foco.x - focoObj) < 0.002 && items.every((it) => Math.abs(it.vaiven.v) < 0.004 && Math.abs(it.vaiven.x) < 0.002);
     if (quieto && cuadro % (TACTIL ? 3 : 2)) return;
-    const dt = Math.max(1e-3, Math.min(0.04, (t - ultimo) / 1000));
+    const dtReal = (t - ultimo) / 1000;
+    const dt = Math.max(1e-3, Math.min(0.04, dtReal));
     ultimo = t;
+    // celular lento: si al moverse tarda más de ~28 ms por cuadro de forma sostenida, se baja la resolución una vez
+    if (TACTIL && !quieto && resolucion > 1.5 && dtReal < 0.2) {
+      lento = lento * 0.92 + (dtReal > 0.028 ? 0.08 : 0);
+      if (lento > 0.6) { resolucion = 1.5; renderer.setPixelRatio(resolucion); medir(); }
+    }
     tiempo += dt;
 
     // el foco sigue al dedo de cerca y se acomoda solo con un resorte firme
