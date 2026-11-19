@@ -242,9 +242,9 @@ svg { display: block; }
 /* overflow-y: hidden en los carriles: con overflow-x: auto el navegador también deja desplazar en vertical, y la ruedita del mouse "subía" la malla dentro de la foto */
 .tarjeta-pista { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .tarjeta-pista::-webkit-scrollbar { display: none; }
-.tarjeta-lamina { flex: 0 0 100%; height: 100%; margin: 0; display: grid; place-items: center; scroll-snap-align: start; scroll-snap-stop: always; }
-.tarjeta-lamina img { width: 100%; height: 100%; object-fit: cover; }
-.tarjeta-lamina img.recorte { width: 82%; height: 82%; object-fit: contain; filter: drop-shadow(0 10px 14px rgb(0 0 0 / 0.12)); transition: transform 0.7s var(--ease); }
+.tarjeta-lamina { position: relative; flex: 0 0 100%; height: 100%; margin: 0; display: grid; place-items: center; scroll-snap-align: start; scroll-snap-stop: always; }
+.tarjeta-lamina img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tarjeta-lamina img.recorte { margin: auto; width: 82%; height: 82%; object-fit: contain; filter: drop-shadow(0 10px 14px rgb(0 0 0 / 0.12)); transition: transform 0.7s var(--ease); }
 .tarjeta-nav { position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%; background: rgb(255 255 255 / 0.92); border: 1px solid var(--linea); color: var(--tinta); opacity: 0; transition: opacity 0.2s, border-color 0.2s; }
 .tarjeta-nav svg { width: 16px; height: 16px; }
 .tarjeta-nav:hover { border-color: var(--tinta); }
@@ -314,8 +314,10 @@ svg { display: block; }
 .ficha-pista { display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .ficha-pista::-webkit-scrollbar { display: none; }
 .lamina { position: relative; flex: 0 0 100%; height: 100%; margin: 0; scroll-snap-align: start; display: grid; place-items: center; overflow: hidden; }
-.lamina img, .lamina video { width: 100%; height: 100%; object-fit: cover; }
-.lamina img.recorte { width: 80%; height: 84%; object-fit: contain; filter: drop-shadow(0 16px 20px rgb(0 0 0 / 0.14)); }
+/* la foto va CLAVADA al cuadro (absoluta): en celular el cuadro toma su alto de aspect-ratio y Safari no le pasa ese
+   alto a un hijo con height: 100% → la foto usaba su alto propio, se corría para abajo y quedaba cortada */
+.lamina img, .lamina video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lamina img.recorte { inset: 0; margin: auto; width: 80%; height: 84%; object-fit: contain; filter: drop-shadow(0 16px 20px rgb(0 0 0 / 0.14)); }
 .ficha-nav { position: absolute; top: 50%; z-index: 2; display: none; place-items: center; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%; background: rgb(255 255 255 / 0.9); border: 1px solid var(--linea); transition: opacity 0.2s; }
 .ficha-nav svg { width: 18px; height: 18px; }
 .ficha-nav:disabled { opacity: 0.3; pointer-events: none; }
